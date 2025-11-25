@@ -20,3 +20,9 @@ services:
     depends_on:
       - user-service
       - course-service
+
+  redis:
+    image: redis:7
+    container_name: redis_cache
+    ports:
+      - "6379:6379"

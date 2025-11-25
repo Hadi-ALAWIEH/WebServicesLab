@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException
 import requests
 import logging
+import redis
+import json
 
 from models import EnrollRequest
 
 app = FastAPI(title="Enrollment Service")
+redis_client = redis.Redis(host='redis', port=6379, decode_responses=True)
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("enrollment-service")
@@ -15,12 +18,38 @@ USER_SERVICE = "http://user-service:8001"
 COURSE_SERVICE = "http://course-service:8002"
 
 def check_user_exists(user_id):
+    cache_key = f"user:{user_id}"
+
+    # 1) Check Redis cache first
+    cached = redis_client.get(cache_key)
+    if cached:
+        return True  # we don't store False
+
+    # 2) If not cached → call User Service
     users = requests.get(f"{USER_SERVICE}/users").json()
-    return any(u["id"] == user_id for u in users)
+    exists = any(u["id"] == user_id for u in users)
+
+    # 3) Store only positive results in cache (avoid caching misses)
+    if exists:
+        redis_client.set(cache_key, "1", ex=60)  # expire in 60 seconds
+
+    return exists
 
 def check_course_exists(course_id):
+    cache_key = f"course:{course_id}"
+
+    # Check Redis first
+    cached = redis_client.get(cache_key)
+    if cached:
+        return True
+
     res = requests.get(f"{COURSE_SERVICE}/courses/{course_id}")
-    return res.status_code == 200
+
+    if res.status_code == 200:
+        redis_client.set(cache_key, "1", ex=60)
+        return True
+
+    return False
 
 @app.post("/enroll")
 def enroll(data: EnrollRequest):

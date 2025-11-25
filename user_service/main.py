@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from models import User, RegisterRequest, LoginRequest
 from database import users
 import logging
+import redis;
 
 app = FastAPI(title="User Service")
 logging.basicConfig(level=logging.INFO)
